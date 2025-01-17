@@ -190,11 +190,17 @@ impl<T> Arena<T> {
         if slot.generation != idx.generation as i32 { return None };
         Some(unsafe { &mut slot.entry.item })
     }
+
     pub fn insert(&mut self, item: T) -> Idx {
+        self.insert_with_idx(|_idx| item)
+    }
+    pub fn insert_with_idx(&mut self, item: impl FnOnce(Idx) -> T) -> Idx {
         if self.free_count == 0 {
             let index = self.slots.len() as u32;
+            let idx = Idx { index, generation: 0 };
+            let item = item(idx);
             self.slots.push(Slot { entry: Entry { item: ManuallyDrop::new(item)}, generation: 0});
-            Idx { index, generation: 0 }
+            idx
         }
         else {
             let index = self.first_free;
@@ -202,10 +208,12 @@ impl<T> Arena<T> {
             let generation = -slot.generation;
             slot.generation = generation;
             self.first_free = unsafe { slot.entry.next_free };
+            let idx = Idx { index, generation: generation as u32 };
+            let item = item(idx);
             slot.entry.item = ManuallyDrop::new(item);
             self.free_count -= 1;
 
-            Idx { index, generation: generation as u32 }
+            idx
         }
     }
     pub fn iter(&self) -> Iter<T> {
